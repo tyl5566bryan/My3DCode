@@ -1,0 +1,36 @@
+% clc;
+% clear;
+
+% source = '/home/yltian/3D/Data/train';
+% target = '/home/yltian/3D/Data/train_HDF5';
+% 
+% if ~isdir(target)
+%     mkdir(target)
+% end
+% 
+% folders = dir(source);
+% folders = folders(3:end);
+% 
+% for i = 1:length(folders)
+%     folder = [source '/' folders(i).name];
+%     files = dir(folder);
+%     files = files(3:end);
+%     
+%     tic
+%     data = zeros(length(files), 30, 30, 30, 'int8');
+%     
+%     parfor j = 111: length(files)
+%         file = [folder '/' files(j).name];
+%         volume = obj2vox(file, 24, 3, 0);
+%         data(j,:,:,:) = volume;
+%     end
+%     toc;
+%     
+%     data = permute(data, [4, 3, 2, 1]);
+%     save_name = [target '/' folders(i).name '.h5'];
+%     h5create(save_name, '/data', size(data), 'Datatype', 'int8')
+%     h5write(save_name, '/data', data)
+%     
+% end
+
+lists = {'02933112', '03001627', '04256520', '04379243', '02691156', '02958343'};
