@@ -2,7 +2,7 @@
 
 % clear;close all; clc;
 
-file = '3Dgeneration.h5';
+file = '/home/yltian/3D/Code/My3DCode/lua/3Dgeneration.h5';
 data = h5read(file, '/data');
 data = permute(data, [5, 4, 3, 2, 1]);
 data = squeeze(data);
