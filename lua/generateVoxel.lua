@@ -4,7 +4,7 @@ require 'hdf5'
 
 opt = {
     batch_size = 64,        -- number of samples to produce
-    net = './checkpoints/3DShape_25_net_G.t7',   -- path to the generator network
+    net = './checkpoints_table/3DShape_10_net_G.t7',   -- path to the generator network
     noise_mode = 'random',  -- random / line / linefull1d / linefull
     name = '3Dgeneration.h5',  -- name of the file saved
     gpu = 1,               -- gpu mode. 0 = CPU, 1 = GPU

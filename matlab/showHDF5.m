@@ -7,10 +7,10 @@ data = h5read(file, '/data');
 data = permute(data, [5, 4, 3, 2, 1]);
 data = squeeze(data);
 
-i = 2;
+i = 12;
 sample = data(i, 2:31, 2:31, 2:31);
 sample = squeeze(sample);
-ind1 = find(sample > 0.99); ind2 = find(sample <= 0.99);
+ind1 = find(sample > 0.5); ind2 = find(sample <= 0.5);
 sample(ind1) = 1; sample(ind2) = 0;
 sample = double(sample);
 
