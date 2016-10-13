@@ -79,14 +79,12 @@ local VolumetricFullConv = nn.VolumetricFullConvolution
 local VolumetricBN = nn.VolumetricBatchNormalization
 local View = nn.View
 local Linear = nn.Linear
-local Reshape = nn.Reshape
 
 local nef = opt.nef
 local ndf = opt.ndf
 local nz = opt.nz
 local nc = opt.nc
 local nh = opt.nh
-local batch = opt.batch_size
 
 local encoder = nn.Sequential()
 encoder:add(VolumetricConv(nc, nef, 4, 4, 4, 2, 2, 2, 1, 1, 1))
@@ -96,7 +94,7 @@ encoder:add(VolumetricBN(nef * 2)):add(nn.LeakyReLU(0.2, true))
 encoder:add(VolumetricConv(nef * 2, nef * 4, 4, 4, 4, 2, 2, 2, 1, 1, 1))
 encoder:add(VolumetricBN(nef * 4)):add(nn.LeakyReLU(0.2, true))
 encoder:add(VolumetricConv(ndf * 4, nh, 4, 4, 4))
-encoder:add(Reshape(batch, nh)):add(nn.ReLU(true))
+encoder:add(View(nh)):add(nn.ReLU(true))
 local mean_logvar = nn.ConcatTable()
 mean_logvar:add(Linear(nh, nz))
 mean_logvar:add(Linear(nh, nz))
@@ -105,7 +103,7 @@ encoder:apply(weights_init)
 
 local decoder = nn.Sequential()
 decoder:add(Linear(nz, nh)):add(nn.ReLU(true))
-decoder:add(Reshape(batch, nh, 1, 1, 1))
+decoder:add(View(nh, 1, 1, 1))
 decoder:add(VolumetricFullConv(nh, ndf * 4, 4, 4, 4))
 decoder:add(VolumetricBN(ndf * 4)):add(nn.ReLU(true))
 decoder:add(VolumetricFullConv(ndf * 4, ndf * 2, 4, 4, 4, 2, 2, 2, 1, 1, 1))
