@@ -56,7 +56,7 @@ local data_sampler = VoxelBatchSampler(opt.hdf5_files)
 -----------------------------------------------------
 local inputs = torch.Tensor(opt.batch_size, 1, opt.cube_length, opt.cube_length, opt.cube_length):fill(0)
 
-local err_KLD, err_REC
+local err_KLD, err_Rec, err_bound
 local epoch_tm = torch.Timer()
 local batch_tm = torch.Timer()
 local data_tm  = torch.Timer()
@@ -126,10 +126,6 @@ local criterion = nn.BCECriterion()
 criterion.sizeAverage = false
 
 -----------------------------------------------------------------
-optimState = {
-  learningRate = 0.001
-}
-
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
@@ -143,20 +139,72 @@ if opt.gpu > 0 then
    encoder:cuda(); decoder:cuda(); model:cuda(); criterion:cuda()
 end
 
+optimState = {
+  learningRate = 0.001
+}
+
 local parameters, gradParameters = model:getParameters()
 
 local fx = function(x)
-  gradParametersD:zero()
+  gradParameters:zero()
   --model:zeroGradParameters()
   
+  data_tm:reset(); data_tm:resume()
+  local real = data_sampler:sampleBalance(opt.batch_size)
+  data_tm:stop()
+  real = torch.reshape(real, torch.LongStorage{opt.batch_size, 1, 30, 30, 30})
+  inputs:fill(0)
+  inputs[{{},{},{2,31},{2,31},{2,31}}]:copy(real)
   
+  local reconstruction, mean, log_var
+  reconstruction, mean, log_var = unpack(model:forward(inputs))
+  
+  -- reconstruction loss
+  err_Rec = criterion:forward(reconstruction, inputs)
+  local df_dw = criterion:backward(reconstruction, inputs)
+  
+  -- KLD loss
+  local KLD = 1 + log_var - torch.pow(mean, 2) - torch.exp(log_var)
+  err_KLD = -0.5 * torch.sum(KLD)
+  local dKLD_dmu = mean:clone()
+  local dKLD_dlog_var = torch.exp(log_var):mul(-1):add(1):mul(-0.5)
+  
+  -- lower bound
+  err_bound = err_Rec + err_KLD
+  
+  error_grads = {df_dw, dKLD_dmu, dKLD_dlog_var}
+  model:backward(inputs, error_grads)
+  
+  return err_bound, gradParameters
 end
 ---------------------------------------------------------------------
 
-
-
-local KLDloss
-local gradKLDloss
-
-local debug
+for epoch = 1, opt.nepoch do
+  epoch_tm:reset()
+  for i = 1, math.min(data_sampler:size(), opt.ntrain), opt.batch_size do
+  --for i = 1, 40, opt.batch_size do
+    batch_tm:reset()
+    
+    -- Update 3D convolutional VAE
+    optim.adam(fx, parameters, optimState)
+    
+    -- logging
+      if ((i-1) / opt.batch_size) % 1 == 0 then
+         print(('Epoch: [%d][%8d / %8d]\t Time: %.3f  DataTime: %.3f  '
+                   .. '  Err_REC: %.4f  Err_KLD: %.4f Err_BND: %4f'):format(
+                 epoch, ((i-1) / opt.batch_size),
+                 math.floor(math.min(data_sampler:size(), opt.ntrain) / opt.batch_size),
+                 batch_tm:time().real, data_tm:time().real,
+                 err_Rec and err_Rec or -1, err_KLD and err_KLD or -1, err_bound and err_bound or -1))
+      end
+  end
+  
+  paths.mkdir('checkpoints')
+  parameters, gradParameters = nil, nil -- nil them to avoid spiking memory
+  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_VAE.t7', model:clearState())
+  parameters, gradParameters = model:getParameters() -- reflatten the params and get them
+  print(('End of epoch %d / %d \t Time Taken: %.3f'):format(
+            epoch, opt.nepoch, epoch_tm:time().real))
+  
+end
 
