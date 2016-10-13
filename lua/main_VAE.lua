@@ -38,7 +38,7 @@ opt = {
    nc = 1,
    nef = 32,               -- #  of gen filters in first conv layer
    ndf = 32,               -- #  of discrim filters in first conv layer
-   nepoch = 25,
+   nepoch = 50,
    G_k = 5;
    D_k = 1;
    ntrain = math.huge,
@@ -200,6 +200,8 @@ for epoch = 1, opt.nepoch do
   paths.mkdir('checkpoints')
   parameters, gradParameters = nil, nil -- nil them to avoid spiking memory
   torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_VAE.t7', model:clearState())
+  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_Encoder.t7', encoder:clearState())
+  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_Decoder.t7', decoder:clearState())
   parameters, gradParameters = model:getParameters() -- reflatten the params and get them
   print(('End of epoch %d / %d \t Time Taken: %.3f'):format(
             epoch, opt.nepoch, epoch_tm:time().real))
