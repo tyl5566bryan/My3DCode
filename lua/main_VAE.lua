@@ -36,12 +36,13 @@ opt = {
    nh = 400,
    nz = 100,
    nc = 1,
-   nef = 32,               -- #  of gen filters in first conv layer
-   ndf = 32,               -- #  of discrim filters in first conv layer
-   nepoch = 50,
+   nef = 64,               -- #  of gen filters in first conv layer
+   ndf = 64,               -- #  of discrim filters in first conv layer
+   nepoch = 25,
    G_k = 5;
    D_k = 1;
    ntrain = math.huge,
+   --ntrain = 128,
    name = '3DShape',
 }
 opt.manualSeed = torch.random(1, 10000)
@@ -200,8 +201,15 @@ for epoch = 1, opt.nepoch do
   paths.mkdir('checkpoints')
   parameters, gradParameters = nil, nil -- nil them to avoid spiking memory
   torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_VAE.t7', model:clearState())
+  
+  local parameters_E, gradParameters_E = encoder:getParameters()
+  parameters_E, gradParameters_E = nil, nil -- nil them to avoid spiking memory
   torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_Encoder.t7', encoder:clearState())
+  
+  local parameters_D, gradParameters_D = decoder:getParameters()
+  parameters_D, gradParameters_D = nil, nil -- nil them to avoid spiking memory
   torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_Decoder.t7', decoder:clearState())
+  
   parameters, gradParameters = model:getParameters() -- reflatten the params and get them
   print(('End of epoch %d / %d \t Time Taken: %.3f'):format(
             epoch, opt.nepoch, epoch_tm:time().real))
