@@ -4,6 +4,8 @@
 
 *.h5
 
+*.obj
+
 *.png
 *.jpg
 *.jpeg
