@@ -31,10 +31,14 @@ opt = {
    gpu = 1,
    batch_size = 64,
    cube_length = 32,
-   lr = 0.001, 
-   beta1 = 0.5, 
-   nh = 400,
-   nz = 100,
+   lr_ae = 0.002,
+   lr_adv = 0.01,
+   beta1_ae = 0.9,
+   beta1_adv = 0.1,
+   learningRateDecay = 0.0002,
+   nz = 25,
+   nd = 500,
+   nh = 500,
    nc = 1,
    nef = 64,               -- #  of gen filters in first conv layer
    ndf = 64,               -- #  of discrim filters in first conv layer
@@ -56,8 +60,10 @@ local data_sampler = VoxelBatchSampler(opt.hdf5_files)
 
 -----------------------------------------------------
 local inputs = torch.Tensor(opt.batch_size, 1, opt.cube_length, opt.cube_length, opt.cube_length):fill(0)
+local noise = torch.Tensor(opt.batch_size, opt.nz)
+local label = torch.Tensor(opt.batch_size)
 
-local err_KLD, err_Rec, err_bound
+local err_rec, err_D, err_G
 local epoch_tm = torch.Timer()
 local batch_tm = torch.Timer()
 local data_tm  = torch.Timer()
@@ -82,14 +88,17 @@ local VolumetricFullConv = nn.VolumetricFullConvolution
 local VolumetricBN = nn.VolumetricBatchNormalization
 local View = nn.View
 local Linear = nn.Linear
+local BN = nn.BatchNormalization
 
 local nef = opt.nef
 local ndf = opt.ndf
 local nz = opt.nz
-local nc = opt.nc
 local nh = opt.nh
+local nd = opt.nd
+local nc = opt.nc
 
 local encoder = nn.Sequential()
+encoder:add(nn.Dropout(0.2))
 encoder:add(VolumetricConv(nc, nef, 4, 4, 4, 2, 2, 2, 1, 1, 1))
 encoder:add(VolumetricBN(nef)):add(nn.LeakyReLU(0.2, true))
 encoder:add(VolumetricConv(nef, nef * 2, 4, 4, 4, 2, 2, 2, 1, 1, 1))
@@ -97,58 +106,80 @@ encoder:add(VolumetricBN(nef * 2)):add(nn.LeakyReLU(0.2, true))
 encoder:add(VolumetricConv(nef * 2, nef * 4, 4, 4, 4, 2, 2, 2, 1, 1, 1))
 encoder:add(VolumetricBN(nef * 4)):add(nn.LeakyReLU(0.2, true))
 encoder:add(VolumetricConv(ndf * 4, nh, 4, 4, 4))
+encoder:add(VolumetricBN(nh))
 encoder:add(View(nh)):add(nn.ReLU(true))
-local mean_logvar = nn.ConcatTable()
-mean_logvar:add(Linear(nh, nz))
-mean_logvar:add(Linear(nh, nz))
-encoder:add(mean_logvar)
-encoder:apply(weights_init)
+encoder:add(Linear(nh, nz))
 
 local decoder = nn.Sequential()
-decoder:add(Linear(nz, nh)):add(nn.ReLU(true))
-decoder:add(View(nh, 1, 1, 1))
+decoder:add(Linear(nz, nh)):add(View(nh, 1, 1, 1))
+decoder:add(VolumetricBN(nh)):add(nn.LeakyReLU(0.2, true))
 decoder:add(VolumetricFullConv(nh, ndf * 4, 4, 4, 4))
-decoder:add(VolumetricBN(ndf * 4)):add(nn.ReLU(true))
+decoder:add(VolumetricBN(ndf * 4)):add(nn.LeakyReLU(0.2, true))
 decoder:add(VolumetricFullConv(ndf * 4, ndf * 2, 4, 4, 4, 2, 2, 2, 1, 1, 1))
-decoder:add(VolumetricBN(ndf * 2)):add(nn.ReLU(true))
+decoder:add(VolumetricBN(ndf * 2)):add(nn.LeakyReLU(0.2, true))
 decoder:add(VolumetricFullConv(ndf * 2, ndf, 4, 4, 4, 2, 2, 2, 1, 1, 1))
-decoder:add(VolumetricBN(ndf)):add(nn.ReLU(true))
+decoder:add(VolumetricBN(ndf)):add(nn.LeakyReLU(0.2, true))
 decoder:add(VolumetricFullConv(ndf, nc, 4, 4, 4, 2, 2, 2, 1, 1, 1))
 decoder:add(nn.Sigmoid())
 decoder:apply(weights_init)
 
-local input = nn.Identity()()
-local mean, log_var = encoder(input):split(2)
-local z = nn.Sampler()({mean, log_var})
-local reconstruction = decoder(z)
-local model = nn.gModule({input},{reconstruction, mean, log_var})
+local autoencoder = nn.Sequential()
+autoencoder:add(encoder)
+autoencoder:add(decoder)
 
-local criterion = nn.BCECriterion()
-criterion.sizeAverage = false
+local discriminator = nn.Sequential()
+discriminator:add(Linear(nz, nd))
+discriminator:add(BN(nd)):add(nn.ReLU(true))
+discriminator:add(Linear(nd, nd))
+discriminator:add(BN(nd)):add(nn.ReLU(true))
+discriminator:add(Linear(nd, 1))
+discriminator:add(nn.Sigmoid())
+
+local rec_criterion = nn.BCECriterion()
+
+local adv_criterion = nn.BCECriterion()
 
 -----------------------------------------------------------------
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   inputs = inputs:cuda(); 
+   inputs = inputs:cuda()
+   noise = noise:cuda()
+   label = label:cuda()
 
    if pcall(require, 'cudnn') then
       require 'cudnn'
       cudnn.benchmark = true
-      cudnn.convert(encoder, cudnn); cudnn.convert(decoder, cudnn); cudnn.convert(model, cudnn)
+      cudnn.convert(encoder, cudnn) 
+      cudnn.convert(decoder, cudnn)
+      cudnn.convert(autoencoder, cudnn)
+      cudnn.convert(discriminator, cudnn)
    end
-   encoder:cuda(); decoder:cuda(); model:cuda(); criterion:cuda()
+   encoder:cuda(); decoder:cuda(); autoencoder:cuda(); 
+   discriminator:cuda(); rec_criterion:cuda(); adv_criterion:cuda()
 end
 
 optimState = {
-  learningRate = 0.001
+  learningRate = opt.lr_ae,
+  beta1 = opt.beta1_ae,
+  learningRateDecay = opt.learningRateDecay,
+}
+optimState_D = {
+  learningRate = opt.lr_adv,
+  beta1 = opt.beta1_adv,
+  learningRateDecay = opt.learningRateDecay,
 }
 
-local parameters, gradParameters = model:getParameters()
+local parameters, gradParameters = autoencoder:getParameters()
+local parameters_D, gradParameters_D = discriminator:getParameters()
 
-local fx = function(x)
+local f1 = function(x)
+  if parameters ~= x then
+    parameters:copy(x)
+  end
+  
   gradParameters:zero()
-  --model:zeroGradParameters()
+  gradParameters_D:zero()
   
   data_tm:reset(); data_tm:resume()
   local real = data_sampler:sampleBalance(opt.batch_size)
@@ -157,26 +188,45 @@ local fx = function(x)
   inputs:fill(0)
   inputs[{{},{},{2,31},{2,31},{2,31}}]:copy(real)
   
-  local reconstruction, mean, log_var
-  reconstruction, mean, log_var = unpack(model:forward(inputs))
+  -- autoencoder reconstruction loss
+  local inputs_rec = autoencoder:forward(inputs)
+  err_rec = rec_criterion:forward(inputs_rec, inputs)
+  local grad_rec = rec_criterion:backward(inputs_rec, inputs)
+  autoencoder:backward(inputs, grad_rec)
   
-  -- reconstruction loss
-  err_Rec = criterion:forward(reconstruction, inputs)
-  local df_dw = criterion:backward(reconstruction, inputs)
+  -- train discriminator with prior distribution
+  noise:normal(0, 1)
+  label:fill(1)
+  local pred = discriminator:forward(noise)
+  local realloss = adv_criterion:forward(pred, label)
+  local gradrealLoss = adv_criterion:backward(pred, label)
+  discriminator:backward(noise, gradrealLoss)
   
-  -- KLD loss
-  local KLD = 1 + log_var - torch.pow(mean, 2) - torch.exp(log_var)
-  err_KLD = -0.5 * torch.sum(KLD)
-  local dKLD_dmu = mean:clone()
-  local dKLD_dlog_var = torch.exp(log_var):mul(-1):add(1):mul(-0.5)
+  -- train discriminator with data
+  label:fill(0)
+  pred = discriminator:forward(encoder.output)
+  local fakeloss = adv_criterion:forward(pred, label)
+  local gradfakeloss = adv_criterion:backward(pred, label)
+  discriminator:backward(encoder.output, gradfakeloss)
   
-  -- lower bound
-  err_bound = err_Rec + err_KLD
+  err_D = realloss + fakeloss
   
-  error_grads = {df_dw, dKLD_dmu, dKLD_dlog_var}
-  model:backward(inputs, error_grads)
+  -- train encoder (generator) to play the minimax game
+  label:fill(1)
+  err_G = adv_criterion:forward(pred, label)
+  local gradminimaxloss = adv_criterion:backward(pred, label)
+  local gradminimax = discriminator:updateGradInput(encoder.output, gradminimaxloss)
+  encoder:backward(inputs, gradminimax)
   
-  return err_bound, gradParameters
+  return err_G, gradParameters
+end
+
+local f2 = function(x)
+  if parameters_D ~= x  then
+    parameters_D:copy(x)
+  end
+  
+  return  err_D, gradParameters_D
 end
 ---------------------------------------------------------------------
 
@@ -186,33 +236,35 @@ for epoch = 1, opt.nepoch do
   --for i = 1, 40, opt.batch_size do
     batch_tm:reset()
     
-    -- Update 3D convolutional VAE
-    optim.adam(fx, parameters, optimState)
+    -- Update 3D Autoencoder
+    optim.adam(f1, parameters, optimState)
+    -- Update Discriminator
+    optim.adam(f2, parameters_D, optimState_D)
     
     -- logging
       if ((i-1) / opt.batch_size) % 1 == 0 then
          print(('Epoch: [%d][%8d / %8d]\t Time: %.3f  DataTime: %.3f  '
-                   .. '  Err_REC: %.4f  Err_KLD: %.4f Err_BND: %4f'):format(
+                   .. '  Err_REC: %.4f  Err_G: %.4f Err_D: %4f'):format(
                  epoch, ((i-1) / opt.batch_size),
                  math.floor(math.min(data_sampler:size(), opt.ntrain) / opt.batch_size),
                  batch_tm:time().real, data_tm:time().real,
-                 err_Rec and err_Rec or -1, err_KLD and err_KLD or -1, err_bound and err_bound or -1))
+                 err_rec and err_rec or -1, err_G and err_G or -1, err_D and err_D or -1))
       end
   end
   
   paths.mkdir('checkpoints')
   parameters, gradParameters = nil, nil -- nil them to avoid spiking memory
-  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_VAE.t7', model:clearState())
+  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_AAE.t7', autoencoder:clearState())
   
   local parameters_E, gradParameters_E = encoder:getParameters()
   parameters_E, gradParameters_E = nil, nil -- nil them to avoid spiking memory
-  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_Encoder.t7', encoder:clearState())
+  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_encoder.t7', encoder:clearState())
   
   local parameters_D, gradParameters_D = decoder:getParameters()
   parameters_D, gradParameters_D = nil, nil -- nil them to avoid spiking memory
-  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_Decoder.t7', decoder:clearState())
+  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_decoder.t7', decoder:clearState())
   
-  parameters, gradParameters = model:getParameters() -- reflatten the params and get them
+  parameters, gradParameters = autoencoder:getParameters() -- reflatten the params and get them
   print(('End of epoch %d / %d \t Time Taken: %.3f'):format(
             epoch, opt.nepoch, epoch_tm:time().real))
   
