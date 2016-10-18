@@ -60,8 +60,8 @@ local data_sampler = VoxelBatchSampler(opt.hdf5_files)
 
 -----------------------------------------------------
 local inputs = torch.Tensor(opt.batch_size, 1, opt.cube_length, opt.cube_length, opt.cube_length):fill(0)
-local noise = torch.Tensor(opt.batch_size, opt.nz)
-local label = torch.Tensor(opt.batch_size)
+local noise = torch.Tensor(2 * opt.batch_size, opt.nz)
+local label = torch.Tensor(2 * opt.batch_size)
 
 local err_rec, err_D, err_G
 local epoch_tm = torch.Timer()
@@ -98,7 +98,6 @@ local nd = opt.nd
 local nc = opt.nc
 
 local encoder = nn.Sequential()
-encoder:add(nn.Dropout(0.2))
 encoder:add(VolumetricConv(nc, nef, 4, 4, 4, 2, 2, 2, 1, 1, 1))
 encoder:add(VolumetricBN(nef)):add(nn.LeakyReLU(0.2, true))
 encoder:add(VolumetricConv(nef, nef * 2, 4, 4, 4, 2, 2, 2, 1, 1, 1))
@@ -134,6 +133,7 @@ discriminator:add(Linear(nd, nd))
 discriminator:add(BN(nd)):add(nn.ReLU(true))
 discriminator:add(Linear(nd, 1))
 discriminator:add(nn.Sigmoid())
+discriminator:apply(weights_init)
 
 local rec_criterion = nn.BCECriterion()
 
@@ -195,30 +195,26 @@ local f1 = function(x)
   autoencoder:backward(inputs, grad_rec)
   
   -- train discriminator with prior distribution
-  noise:normal(0, 1)
-  label:fill(1)
+  noise[{{1,opt.batch_size},{}}]:normal(0, 1)
+  label[{{1,opt.batch_size}}]:fill(1)
+  noise[{{1 + opt.batch_size, 2 * opt.batch_size},{}}]:copy(encoder.output)
+  label[{{1 + opt.batch_size, 2 * opt.batch_size}}]:fill(0)
   local pred = discriminator:forward(noise)
-  local realloss = adv_criterion:forward(pred, label)
+  local loss = adv_criterion:forward(pred, label)
   local gradrealLoss = adv_criterion:backward(pred, label)
   discriminator:backward(noise, gradrealLoss)
   
-  -- train discriminator with data
-  label:fill(0)
-  pred = discriminator:forward(encoder.output)
-  local fakeloss = adv_criterion:forward(pred, label)
-  local gradfakeloss = adv_criterion:backward(pred, label)
-  discriminator:backward(encoder.output, gradfakeloss)
-  
-  err_D = realloss + fakeloss
+  err_D = loss
   
   -- train encoder (generator) to play the minimax game
-  label:fill(1)
-  err_G = adv_criterion:forward(pred, label)
-  local gradminimaxloss = adv_criterion:backward(pred, label)
+  --label:fill(1)
+  local pred2 = discriminator:forward(encoder.output)
+  err_G = adv_criterion:forward(pred2, label[{{1,opt.batch_size}}])
+  local gradminimaxloss = adv_criterion:backward(pred2, label[{{1,opt.batch_size}}])
   local gradminimax = discriminator:updateGradInput(encoder.output, gradminimaxloss)
   encoder:backward(inputs, gradminimax)
   
-  return err_G, gradParameters
+  return err_rec, gradParameters
 end
 
 local f2 = function(x)
