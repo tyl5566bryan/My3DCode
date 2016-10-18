@@ -9,7 +9,7 @@ require 'Sampler'
 --------------------------------------------
 opt = {
     batch_size = 64,        -- number of samples to produce
-    net = './checkpoints/3DShape_25_VAE.t7',   -- path to the generator network
+    net = './checkpoints_table_VAE/3DShape_25_VAE.t7',   -- path to the generator network
     name = '3Dgeneration_VAE.h5',  -- name of the file saved
     gpu = 1,               -- gpu mode. 0 = CPU, 1 = GPU
     nz = 100,
