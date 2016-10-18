@@ -1,10 +1,8 @@
 require 'torch'
 require 'nn'
 require 'optim'
-require 'nngraph'
 
 require 'batchSampler'
-require 'Sampler'
 
 -- set torch environment
 opt = {
@@ -54,6 +52,7 @@ print("Random Seed: " .. opt.manualSeed)
 torch.manualSeed(opt.manualSeed)
 torch.setnumthreads(1)
 torch.setdefaulttensortype('torch.FloatTensor')
+--torch.setDevice(opt.gpu + 2)
 
 -- create data sampler
 local data_sampler = VoxelBatchSampler(opt.hdf5_files)
