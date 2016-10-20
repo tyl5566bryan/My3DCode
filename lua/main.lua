@@ -13,9 +13,8 @@ opt = {
      '/home/yltian/3D/Data/train_HDF5_x12/03001627.h5',
      '/home/yltian/3D/Data/train_HDF5_x12/04256520.h5',
      --]]
-     '/home/yltian/3D/Data/train_HDF5_x12/04379243.h5',
+     --'/home/yltian/3D/Data/train_HDF5_x12/04379243.h5',
      
-     --[[
      '/home/yltian/3D/Data/train_HDF5/02691156.h5',
      '/home/yltian/3D/Data/train_HDF5/02828884.h5',
      '/home/yltian/3D/Data/train_HDF5/02933112.h5',
@@ -23,7 +22,6 @@ opt = {
      '/home/yltian/3D/Data/train_HDF5/03001627.h5',
      '/home/yltian/3D/Data/train_HDF5/04256520.h5',
      '/home/yltian/3D/Data/train_HDF5/04379243.h5',
-     --]]
    },
    gpu = 1,
    batch_size = 64,
