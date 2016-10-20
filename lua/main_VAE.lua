@@ -72,7 +72,8 @@ local function weights_init(m)
       if m.weight then m.weight:normal(1.0, 0.02) end
       if m.bias then m.bias:fill(0) end
    elseif name:find('Linear') then
-      m.weight:normal(0.0, 0.01)
+      if m.weight then m.weight:normal(0.0, 0.01)
+      if m.bias then m.bias:fill(0) end
    end
 end
 
