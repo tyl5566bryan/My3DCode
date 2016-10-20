@@ -14,8 +14,8 @@ opt = {
     gpu = 1,               -- gpu mode. 0 = CPU, 1 = GPU
     nz = 100,
     data_file = '/home/yltian/3D/Data/val_HDF5/04379243.h5',
-    encoder = './checkpoints/3DShape_25_Encoder.t7',
-    decoder = './checkpoints/3DShape_25_Decoder.t7',
+    encoder = './checkpoints_table_VAE/3DShape_25_Encoder.t7',
+    decoder = './checkpoints_table_VAE/3DShape_25_Decoder.t7',
 }
 
 if opt.gpu > 0 then
