@@ -30,11 +30,11 @@ opt = {
    batch_size = 64,
    cube_length = 32,
    lr_ae = 0.002,
-   lr_adv = 0.01,
+   lr_adv = 0.002,
    beta1_ae = 0.9,
    beta1_adv = 0.1,
    learningRateDecay = 0.0002,
-   nz = 25,
+   nz = 100,
    nd = 500,
    nh = 500,
    nc = 1,
@@ -61,6 +61,7 @@ local data_sampler = VoxelBatchSampler(opt.hdf5_files)
 local inputs = torch.Tensor(opt.batch_size, 1, opt.cube_length, opt.cube_length, opt.cube_length):fill(0)
 local noise = torch.Tensor(2 * opt.batch_size, opt.nz)
 local label = torch.Tensor(2 * opt.batch_size)
+local feat = torch.Tensor(opt.batch_size, opt.nz)
 
 local err_rec, err_D, err_G
 local epoch_tm = torch.Timer()
@@ -77,7 +78,8 @@ local function weights_init(m)
       if m.weight then m.weight:normal(1.0, 0.02) end
       if m.bias then m.bias:fill(0) end
    elseif name:find('Linear') then
-      m.weight:normal(0.0, 0.01)
+      if m.weight then m.weight:normal(0.0, 0.01)
+      if m.bias then m.bias:fill(0) end
    end
 end
 
@@ -110,13 +112,13 @@ encoder:add(Linear(nh, nz))
 
 local decoder = nn.Sequential()
 decoder:add(Linear(nz, nh)):add(View(nh, 1, 1, 1))
-decoder:add(VolumetricBN(nh)):add(nn.LeakyReLU(0.2, true))
+decoder:add(VolumetricBN(nh)):add(nn.ReLU(true))
 decoder:add(VolumetricFullConv(nh, ndf * 4, 4, 4, 4))
-decoder:add(VolumetricBN(ndf * 4)):add(nn.LeakyReLU(0.2, true))
+decoder:add(VolumetricBN(ndf * 4)):add(nn.ReLU(true))
 decoder:add(VolumetricFullConv(ndf * 4, ndf * 2, 4, 4, 4, 2, 2, 2, 1, 1, 1))
-decoder:add(VolumetricBN(ndf * 2)):add(nn.LeakyReLU(0.2, true))
+decoder:add(VolumetricBN(ndf * 2)):add(nn.ReLU(true))
 decoder:add(VolumetricFullConv(ndf * 2, ndf, 4, 4, 4, 2, 2, 2, 1, 1, 1))
-decoder:add(VolumetricBN(ndf)):add(nn.LeakyReLU(0.2, true))
+decoder:add(VolumetricBN(ndf)):add(nn.ReLU(true))
 decoder:add(VolumetricFullConv(ndf, nc, 4, 4, 4, 2, 2, 2, 1, 1, 1))
 decoder:add(nn.Sigmoid())
 decoder:apply(weights_init)
@@ -127,9 +129,11 @@ autoencoder:add(decoder)
 
 local discriminator = nn.Sequential()
 discriminator:add(Linear(nz, nd))
-discriminator:add(BN(nd)):add(nn.ReLU(true))
+--discriminator:add(BN(nd)):add(nn.ReLU(true))
+discriminator:add(nn.ReLU(true)):add(nn.Dropout(0.5))
 discriminator:add(Linear(nd, nd))
-discriminator:add(BN(nd)):add(nn.ReLU(true))
+--discriminator:add(BN(nd)):add(nn.ReLU(true))
+discriminator:add(nn.ReLU(true)):add(nn.Dropout(0.5))
 discriminator:add(Linear(nd, 1))
 discriminator:add(nn.Sigmoid())
 discriminator:apply(weights_init)
@@ -138,6 +142,8 @@ local rec_criterion = nn.BCECriterion()
 
 local adv_criterion = nn.BCECriterion()
 
+local gen_criterion = nn.BCECriterion()
+
 -----------------------------------------------------------------
 if opt.gpu > 0 then
    require 'cunn'
@@ -145,6 +151,7 @@ if opt.gpu > 0 then
    inputs = inputs:cuda()
    noise = noise:cuda()
    label = label:cuda()
+   feat = feat:cuda()
 
    if pcall(require, 'cudnn') then
       require 'cudnn'
@@ -155,7 +162,7 @@ if opt.gpu > 0 then
       cudnn.convert(discriminator, cudnn)
    end
    encoder:cuda(); decoder:cuda(); autoencoder:cuda(); 
-   discriminator:cuda(); rec_criterion:cuda(); adv_criterion:cuda()
+   discriminator:cuda(); rec_criterion:cuda(); adv_criterion:cuda(); gen_criterion:cuda()
 end
 
 optimState = {
@@ -193,8 +200,8 @@ local f1 = function(x)
   local grad_rec = rec_criterion:backward(inputs_rec, inputs)
   autoencoder:backward(inputs, grad_rec)
   
-  -- train discriminator with prior distribution
-  noise[{{1,opt.batch_size},{}}]:normal(0, 1)
+  -- train discriminator with prior and data distribution
+  noise[{{1,opt.batch_size},{}}]:normal(0,1)
   label[{{1,opt.batch_size}}]:fill(1)
   noise[{{1 + opt.batch_size, 2 * opt.batch_size},{}}]:copy(encoder.output)
   label[{{1 + opt.batch_size, 2 * opt.batch_size}}]:fill(0)
@@ -204,14 +211,18 @@ local f1 = function(x)
   discriminator:backward(noise, gradrealLoss)
   
   err_D = loss
+  local err_prior = gen_criterion:forward(pred[{{1, opt.batch_size},{}}], label[{{1, opt.batch_size}}])
+  local err_data = gen_criterion:forward(pred[{{1+opt.batch_size, 2*opt.batch_size},{}}], label[{{1+opt.batch_size, 2*opt.batch_size}}])
+  err_G = gen_criterion:forward(pred[{{1+opt.batch_size, 2*opt.batch_size},{}}], label[{{1,opt.batch_size}}])
   
-  -- train encoder (generator) to play the minimax game
-  --label:fill(1)
-  local pred2 = discriminator:forward(encoder.output)
-  err_G = adv_criterion:forward(pred2, label[{{1,opt.batch_size}}])
-  local gradminimaxloss = adv_criterion:backward(pred2, label[{{1,opt.batch_size}}])
-  local gradminimax = discriminator:updateGradInput(encoder.output, gradminimaxloss)
-  encoder:backward(inputs, gradminimax)
+  -- train generator to play the minimax game
+  label[{{1 + opt.batch_size, 2 * opt.batch_size}}]:fill(1)
+  local gradloss = adv_criterion:backward(pred, label)
+  local gradminimax = discriminator:updateGradInput(noise, gradloss)
+  encoder:backward(inputs, gradminimax[{{1+opt.batch_size, 2*opt.batch_size},{}}])
+  
+  print(('loss D: %.4f, loss prior: %.4f, loss data: %.4f, loss generator: %.4f'):format(err_D, err_prior, err_data, err_G))
+  --print(('loss verification: %.4f'):format(2 * err_D - err_prior - err_data))
   
   return err_rec, gradParameters
 end
@@ -245,6 +256,7 @@ for epoch = 1, opt.nepoch do
                  batch_tm:time().real, data_tm:time().real,
                  err_rec and err_rec or -1, err_G and err_G or -1, err_D and err_D or -1))
       end
+      
   end
   
   paths.mkdir('checkpoints')
