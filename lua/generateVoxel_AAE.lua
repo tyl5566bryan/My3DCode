@@ -7,8 +7,8 @@ require 'hdf5'
 --------------------------------------------
 opt = {
     batch_size = 64,        -- number of samples to produce
-    net = './checkpoints_table_AAE/3DShape_25_AAE.t7',   -- path to the generator network
-    name = '3Dgeneration_AAE.h5',  -- name of the file saved
+    net = './checkpoints/3DShape_25_AAE.t7',   -- path to the generator network
+    name = '3Dgeneration_table_AAE.h5',  -- name of the file saved
     gpu = 1,               -- gpu mode. 0 = CPU, 1 = GPU
     nz = 100,
     data_file = '/home/yltian/3D/Data/val_HDF5/04379243.h5',
@@ -53,8 +53,10 @@ end
 
 -- sample output and save
 --------------------------------------------
-local reconstruction
-reconstruction = model:forward(inputs)
+local reconstruction = model:forward(inputs)
+
+local feat = encoder:forward(inputs)
+print(('feat mean: %.4f, feat var: %.4f'):format(feat:mean(), feat:var()))
 
 local res1 = torch.Tensor(reconstruction:size())
 res1:copy(reconstruction)
