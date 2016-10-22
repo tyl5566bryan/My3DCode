@@ -1,21 +1,19 @@
-%% show results of GAN
+%% show ground truth voxels
 clear;close all; clc;
 
-file = '/home/yltian/3D/Code/My3DCode/lua/3Dgeneration_table_GAN.h5';
-data = h5read(file, '/data');
-data = permute(data, [5, 4, 3, 2, 1]);
-data = squeeze(data);
+gt_file = '/home/yltian/3D/Data/val_HDF5/03001627.h5';
+data = h5read(gt_file, '/data');
+data = permute(data, [4, 3, 2, 1]);
+data = data(:,:,end:-1:1,:);
 
-save_folder = './pictures_GAN/';
+save_folder = './pictures_GT/';
 if ~exist(save_folder, 'dir'); mkdir(save_folder); end
 
 for i = 1:size(data,1)
     
-    sample = data(i, 2:31, 2:31, 2:31);
+    sample = data(i,:,:,:);
     sample = squeeze(sample);
-    ind1 = find(sample > 0.5); ind2 = find(sample <= 0.5);
-    sample(ind1) = 1; sample(ind2) = 0;
-    
+   
     figure;
     p = patch(isosurface(squeeze(sample)));
     set(p, 'FaceColor', 'red', 'EdgeColor', 'none');
@@ -25,10 +23,43 @@ for i = 1:size(data,1)
     lighting gouraud
 
 %     figure, plot3D(squeeze(sample)); axis on; grid on;
-    print([save_folder num2str(i) '_GAN'], '-dpng');
+    print([save_folder num2str(i) '_GT'], '-dpng');
     close;
     
 end
+
+
+%% show results of GAN
+% clear;close all; clc;
+% 
+% file = '/home/yltian/3D/Code/My3DCode/lua/3Dgeneration.h5';
+% data = h5read(file, '/data');
+% data = permute(data, [5, 4, 3, 2, 1]);
+% data = squeeze(data);
+% 
+% save_folder = './pictures_GAN/';
+% if ~exist(save_folder, 'dir'); mkdir(save_folder); end
+% 
+% for i = 1:size(data,1)
+%     
+%     sample = data(i, 2:31, 2:31, 2:31);
+%     sample = squeeze(sample);
+%     ind1 = find(sample > 0.5); ind2 = find(sample <= 0.5);
+%     sample(ind1) = 1; sample(ind2) = 0;
+%     
+%     figure;
+%     p = patch(isosurface(squeeze(sample)));
+%     set(p, 'FaceColor', 'red', 'EdgeColor', 'none');
+%     daspect([1,1,1])
+%     view(3); axis off
+%     camlight
+%     lighting gouraud
+% 
+% %     figure, plot3D(squeeze(sample)); axis on; grid on;
+%     print([save_folder num2str(i) '_GAN'], '-dpng');
+%     close;
+%     
+% end
 
 %% show results of AAE
 % clear;close all; clc;
