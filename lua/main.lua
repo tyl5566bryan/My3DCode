@@ -7,13 +7,13 @@ require 'batchSampler'
 opt = {
    hdf5_files = {
      
-     '/home/yltian/3D/Data/train_HDF5_x12/02691156.h5',  --airplane
+     --'/home/yltian/3D/Data/train_HDF5_x12/02691156.h5',  --airplane
      --'/home/yltian/3D/Data/train_HDF5_x12/02828884.h5', --bench
      --'/home/yltian/3D/Data/train_HDF5_x12/02933112.h5', --cabinet
-     '/home/yltian/3D/Data/train_HDF5_x12/02958343.h5', --car
+     --'/home/yltian/3D/Data/train_HDF5_x12/02958343.h5', --car
      '/home/yltian/3D/Data/train_HDF5_x12/03001627.h5', --chair
      --'/home/yltian/3D/Data/train_HDF5_x12/04256520.h5', --sofa
-     '/home/yltian/3D/Data/train_HDF5_x12/04379243.h5', --table
+     --'/home/yltian/3D/Data/train_HDF5_x12/04379243.h5', --table
      
      --[[
      '/home/yltian/3D/Data/train_HDF5/02691156.h5', --airplane    2831
@@ -35,7 +35,7 @@ opt = {
    ngf = 64,               -- #  of gen filters in first conv layer
    ndf = 64,               -- #  of discrim filters in first conv layer
    nepoch = 25,
-   G_k = 5;
+   G_k = 3;
    D_k = 1;
    ntrain = math.huge,
    name = '3DShape',
