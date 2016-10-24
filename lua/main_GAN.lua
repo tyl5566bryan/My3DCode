@@ -25,7 +25,7 @@ opt = {
      '/home/yltian/3D/Data/train_HDF5/04379243.h5', --table       5905
      --]]
    },
-   gpu = 1,
+   gpu = 2,
    batch_size = 64,
    cube_length = 32,
    lr = 0.0002, 
@@ -39,6 +39,7 @@ opt = {
    D_k = 1;
    ntrain = math.huge,
    name = '3DShape',
+   folder = 'checkpoints_GAN'
 }
 opt.manualSeed = torch.random(1, 10000)
 print("Random Seed: " .. opt.manualSeed)
@@ -132,6 +133,11 @@ if opt.gpu > 0 then
       cudnn.convert(netD, cudnn)
    end
    netD:cuda();           netG:cuda();           criterion:cuda()
+   
+   require 'cutorch'
+   cutorch.manualSeed(opt.manualSeed)
+   cutorch.setDevice(opt.gpu)
+   
 end
 
 local parametersD, gradParametersD = netD:getParameters()
@@ -236,11 +242,11 @@ for epoch = 1, opt.nepoch do
       end
   end
   
-  paths.mkdir('checkpoints')
+  paths.mkdir(opt.folder)
   parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
   parametersG, gradParametersG = nil, nil
-  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', netG:clearState())
-  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+  torch.save(opt.folder..'/' .. opt.name .. '_' .. epoch .. '_net_G.t7', netG:clearState())
+  torch.save(opt.folder..'/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
   parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
   parametersG, gradParametersG = netG:getParameters()
   print(('End of epoch %d / %d \t Time Taken: %.3f'):format(
