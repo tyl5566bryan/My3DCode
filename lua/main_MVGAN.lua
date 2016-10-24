@@ -2,7 +2,7 @@ require 'torch'
 require 'nn'
 require 'optim'
 require 'batchSampler'
-require 'utils/VolumetricProjection'
+require 'layer/VolumetricProjection'
 
 -- set torch environment
 opt = {
@@ -139,6 +139,10 @@ if opt.gpu > 0 then
       cudnn.convert(netD, cudnn)
    end
    netD:cuda();           netG:cuda();           criterion:cuda()
+   
+   require 'cutorch'
+   cutorch.manualSeed(opt.manualSeed)
+   cutorch.setDevice(opt.gpu)
 end
 
 local parametersD, gradParametersD = netD:getParameters()
