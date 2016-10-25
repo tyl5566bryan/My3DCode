@@ -12,18 +12,18 @@ opt = {
      --'/home/yltian/3D/Data/train_HDF5_x12/02828884.h5', --bench
      --'/home/yltian/3D/Data/train_HDF5_x12/02933112.h5', --cabinet
      --'/home/yltian/3D/Data/train_HDF5_x12/02958343.h5', --car
-     '/home/yltian/3D/Data/train_HDF5_x12/03001627.h5', --chair
+     --'/home/yltian/3D/Data/train_HDF5_x12/03001627.h5', --chair
      --'/home/yltian/3D/Data/train_HDF5_x12/04256520.h5', --sofa
-     --'/home/yltian/3D/Data/train_HDF5_x12/04379243.h5', --table
+     '/home/yltian/3D/Data/train_HDF5_x12/04379243.h5', --table
      
      --[[
-     '/home/yltian/3D/Data/train_HDF5/02691156.h5', --airplane    2831
-     '/home/yltian/3D/Data/train_HDF5/02828884.h5', --bench       1269
+     '/home/yltian/3D/Data/train_HDF5/02691156.h5', --airplane    2831 !
+     '/home/yltian/3D/Data/train_HDF5/02828884.h5', --bench       1269 
      '/home/yltian/3D/Data/train_HDF5/02933112.h5', --cabinet     1099
-     '/home/yltian/3D/Data/train_HDF5/02958343.h5', --car         2473
-     '/home/yltian/3D/Data/train_HDF5/03001627.h5', --chair       4744
-     '/home/yltian/3D/Data/train_HDF5/04256520.h5', --sofa        2221
-     '/home/yltian/3D/Data/train_HDF5/04379243.h5', --table       5905
+     '/home/yltian/3D/Data/train_HDF5/02958343.h5', --car         2473 !
+     '/home/yltian/3D/Data/train_HDF5/03001627.h5', --chair       4744 !
+     '/home/yltian/3D/Data/train_HDF5/04256520.h5', --sofa        2221 !
+     '/home/yltian/3D/Data/train_HDF5/04379243.h5', --table       5905 !
      --]]
    },
    gpu = 2,
